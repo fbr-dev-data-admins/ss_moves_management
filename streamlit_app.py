@@ -200,8 +200,6 @@ if run:
         st.warning("Please upload at least one CSV.")
         st.stop()
 
-    client = load_ss_auth()
-
     gifts_sheet_id = (
         SHEETS["gifts_denver"]
         if location == "Denver"
