@@ -144,22 +144,24 @@ def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column
         log_fn(f"⚠ No valid rows to add to sheet {sheet_name}.")
         return 0
 
-    added_total = 0
+    added = 0
     batch_size = 200
-    progress = st.progress(0)
+    num_batches = math.ceil(len(created_rows) / batch_size)
+    progress_bar = st.progress(0)
     
     for i in range(0, len(created_rows), batch_size):
         batch = created_rows[i:i+batch_size]
         client.Sheets.add_rows(sheet_id, batch)
-        added_total += len(batch)
-        # Update log and progress bar
-        log_fn(f"  • Added {added_total} / {len(created_rows)} rows to {sheet_name}...")
-        progress.progress(min(added_total / len(created_rows), 1.0))
-        time.sleep(0.5)
-
-
+        added += len(batch)
+    
+        # update progress bar
+        progress = min((i + len(batch)) / len(created_rows), 1.0)
+        progress_bar.progress(progress)
+    
+        log_fn(f"  • Added {added}/{len(created_rows)} rows to sheet {sheet_name}...")
+    
+    progress_bar.empty()
     log_fn(f"✅ Finished writing {added} rows to sheet {sheet_name}.")
-    return added
 
 # ---------------- Transformers ----------------
 def transform_actions(df):
