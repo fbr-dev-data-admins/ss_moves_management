@@ -11,7 +11,7 @@ def check_password():
     if st.session_state.authenticated:
         return True
 
-    st.title("🔒 Secure Access")
+    st.title("Secure Access")
     password = st.text_input("Enter password", type="password")
 
     if st.button("Login"):
@@ -30,10 +30,10 @@ SHEETS = st.secrets["sheets"]
 DATE_CFG = st.secrets["date_update"]
 
 st.set_page_config(page_title="Smartsheet Moves Management Upload", layout="wide")
-st.title("📊 Smartsheet Moves Management Upload")
+st.title("Smartsheet Moves Management Upload")
 
 location = st.radio("Location", ["Denver", "Western Slope"], horizontal=True)
-update_dates = location == "Denver" and st.checkbox("Update proposal meeting date")
+update_dates = location == "Denver" and st.checkbox("Update last meeting date")
 
 uploaded_files = st.file_uploader(
     "Upload Actions / Proposals / Gifts CSVs",
