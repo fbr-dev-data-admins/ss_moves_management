@@ -75,10 +75,27 @@ def clear_non_blank_rows(client, sheet_name, sheet_id, log):
     log(f"Found {len(rows)} non-blank rows in {sheet_name} sheet.")
     if not rows:
         return
-    for i in range(0, len(rows), 300):
-        client.Sheets.delete_rows(sheet_id, rows[i:i+300])
-        log(f"Deleted {min(300,len(rows)-i)} rows from {sheet_name}...")
+
+    batch_size = 300
+    progress_bar = st.progress(0)
+    deleted_total = 0
+    num_batches = math.ceil(len(rows) / batch_size)
+    
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i:i+batch_size]
+        client.Sheets.delete_rows(sheet_id, batch)
+        deleted_total += len(batch)
+        
+        # update progress bar
+        progress = (i + len(batch)) / len(rows)
+        progress_bar.progress(progress)
+        
+        log(f"🗑 Deleted {deleted_total}/{len(rows)} rows from {sheet_name}...")
         time.sleep(1)
+    
+    progress_bar.empty()
+    log(f"✅ Finished clearing {sheet_name} sheet ({deleted_total} rows).")
+
     log(f"✅ Finished clearing {sheet_name} sheet.")
 
 def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column_name=None):
