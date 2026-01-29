@@ -41,6 +41,7 @@ client = ss_auth.get_client()
 
 # ---------------- UI ----------------
 location = st.radio("Location", ["Denver", "Western Slope"], horizontal=True)
+gifts_sheet_id = SHEETS["gifts_denver"] if location == "Denver" else SHEETS["gifts_wslope"]
 update_dates = location == "Denver" and st.checkbox("Update last meeting date")
 
 uploaded_files = st.file_uploader(
