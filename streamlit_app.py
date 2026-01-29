@@ -62,31 +62,25 @@ def format_currency(val):
     except Exception:
         return None
 
-def clear_non_blank_rows(client, sheet_name, sheet_id, log_fn):
-    try:
-        sheet = client.Sheets.get_sheet(sheet_id)
-    except Exception as e:
-        log_fn(f"⚠ Failed to access sheet {sheet_name}: {e}")
-        return 0
-
-    rows_to_delete = [
+def clear_non_blank_rows(client, sheet_name, sheet_id, log):
+    log(f"Checking {sheet_name} sheet for existing rows...")
+    sheet = client.Sheets.get_sheet(sheet_id)
+    rows = [
         r.id for r in sheet.rows
-        if any(c.value not in [None, ""] for c in r.cells)
+        if any(c.value not in [None, ""] and str(c.value).strip() != "" for c in r.cells)
     ]
+    log(f"Found {len(rows)} non-blank rows in {sheet_name} sheet.")
 
-    if not rows_to_delete:
-        log_fn(f"✔ No non-blank rows found in sheet {sheet_name}.")
-        return 0
+    if not rows:
+        log(f"No rows to delete in {sheet_name}.")
+        return
 
-    log_fn(f"🗑 Deleting {len(rows_to_delete)} non-blank rows from sheet {sheet_name}...")
-    for i in range(0, len(rows_to_delete), 300):
-        batch = rows_to_delete[i:i+300]
-        client.Sheets.delete_rows(sheet_id, batch)
-        log_fn(f"  • Deleted {len(batch)} rows from sheet {sheet_name}.")
+    for i in range(0, len(rows), 300):
+        client.Sheets.delete_rows(sheet_id, rows[i:i+300])
+        log(f"Deleted {min(300, len(rows)-i)} rows from {sheet_name}...")
         time.sleep(1)
 
-    log_fn(f"✅ Finished clearing sheet {sheet_name}.")
-    return len(rows_to_delete)
+    log(f"✅ Finished clearing {sheet_name} sheet.")
 
 def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column_name=None):
     from smartsheet import models as sm
@@ -242,34 +236,16 @@ for name, key in [("Actions", "actions"), ("Proposals", "proposals"), ("Gifts", 
     clear_non_blank_rows(client, name, SHEETS[key], log)
 
 for file in uploaded_files:
-    df = pd.read_csv(file, dtype=str).fillna("")
+    df = pd.read_csv(file, dtype=str, encoding="cp1252").fillna("")
     name_lower = file.name.lower()
 
     if "action" in name_lower:
-        write_rows_to_sheet(
-            client,
-            "Actions",
-            SHEETS["actions"],
-            transform_actions(df),
-            log,
-            primary_column_name="Action Unique ID"
-        )
+        write_rows_to_sheet(client, SHEETS["actions"], transform_actions(df), primary_column_name="Action Unique ID")
     elif "proposal" in name_lower:
-        write_rows_to_sheet(
-            client,
-            "Proposals",
-            SHEETS["proposals"],
-            transform_proposals(df),
-            log
-        )
+        write_rows_to_sheet(client, SHEETS["proposals"], transform_proposals(df))
     elif "gift" in name_lower:
-        write_rows_to_sheet(
-            client,
-            "Gifts",
-            SHEETS[gifts_sheet_key],
-            transform_gifts(df),
-            log
-        )
+        gifts_sheet_id = SHEETS["gifts_denver"] if location == "Denver" else SHEETS["gifts_wslope"]
+        write_rows_to_sheet(client, gifts_sheet_id, transform_gifts(df))
 
     if update_dates:
         update_date_cell(client)
