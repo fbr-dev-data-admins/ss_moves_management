@@ -3,6 +3,7 @@ import pandas as pd
 import time
 from datetime import datetime
 import importlib.util
+import math
 
 # ---------------- UI Password ----------------
 def check_password():
@@ -126,13 +127,19 @@ def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column
         log_fn(f"⚠ No valid rows to add to sheet {sheet_name}.")
         return 0
 
-    added = 0
+    added_total = 0
     batch_size = 200
+    progress = st.progress(0)
+    
     for i in range(0, len(created_rows), batch_size):
-        client.Sheets.add_rows(sheet_id, created_rows[i:i+batch_size])
-        added += len(created_rows[i:i+batch_size])
-        log_fn(f"  • Added {len(created_rows[i:i+batch_size])} rows to {sheet_name}.")
+        batch = created_rows[i:i+batch_size]
+        client.Sheets.add_rows(sheet_id, batch)
+        added_total += len(batch)
+        # Update log and progress bar
+        log_fn(f"  • Added {added_total} / {len(created_rows)} rows to {sheet_name}...")
+        progress.progress(min(added_total / len(created_rows), 1.0))
         time.sleep(0.5)
+
 
     log_fn(f"✅ Finished writing {added} rows to sheet {sheet_name}.")
     return added
@@ -171,12 +178,19 @@ if run:
         st.warning("Please upload at least one CSV.")
         st.stop()
 
-    gifts_sheet_id = SHEETS["gifts_denver"] if location=="Denver" else SHEETS["gifts_wslope"]
-
     log("Clearing target sheets...")
-    sheets_to_clear = [("Actions", "actions"), ("Proposals", "proposals"), ("Gifts", "gifts_denver" if location=="Denver" else "gifts_wslope")]
-    for name, key in sheets_to_clear:
-        clear_non_blank_rows(client, name, SHEETS[key], log)
+
+    sheets_to_clear = [
+        ("Actions", SHEETS["actions"]),
+        ("Proposals", SHEETS["proposals"]),
+    ]
+    
+    gifts_sheet_key = "gifts_denver" if location == "Denver" else "gifts_wslope"
+    sheets_to_clear.append(("Gifts", SHEETS[gifts_sheet_key]))
+    
+    for name, sheet_id in sheets_to_clear:
+        clear_non_blank_rows(client, name, sheet_id, log)
+
 
     for file in uploaded_files:
         df = pd.read_csv(file, dtype=str, encoding="cp1252").fillna("")
