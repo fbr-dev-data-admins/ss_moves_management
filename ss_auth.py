@@ -4,7 +4,7 @@ import smartsheet
 
 AUTH_URL = "https://app.smartsheet.com/b/authorize"
 TOKEN_URL = "https://api.smartsheet.com/2.0/token"
-REDIRECT_URI = "http://localhost"
+REDIRECT_URI = "http://127.0.0.1:8080/"
 SCOPE = ["READ_SHEETS", "WRITE_SHEETS"]
 
 CLIENT_ID = st.secrets["smartsheet"]["client_id"]
@@ -39,3 +39,4 @@ def get_client():
     client = smartsheet.Smartsheet(token["access_token"])
     client.errors_as_exceptions(True)
     return client
+
