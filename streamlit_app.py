@@ -179,14 +179,33 @@ if run:
         clear_non_blank_rows(client, name, SHEETS[key], log)
 
     for file in uploaded_files:
-        df = pd.read_csv(file, dtype=str, encoding="cp1252").fillna("")
-        lower = file.name.lower()
-        if "action" in lower:
-            write_rows_to_sheet(client,"Actions",SHEETS["actions"],transform_actions(df),primary_column_name="Action Unique ID")
-        elif "proposal" in lower:
-            write_rows_to_sheet(client,"Proposals",SHEETS["proposals"],transform_proposals(df))
-        elif "gift" in lower:
-            write_rows_to_sheet(client,"Gifts",gifts_sheet_id,transform_gifts(df))
+    df = pd.read_csv(file, dtype=str, encoding="cp1252").fillna("")
+    lower = file.name.lower()
+    if "action" in lower:
+        write_rows_to_sheet(
+            client,
+            "Actions",
+            SHEETS["actions"],
+            transform_actions(df),
+            log_fn=log,
+            primary_column_name="Action Unique ID"
+        )
+    elif "proposal" in lower:
+        write_rows_to_sheet(
+            client,
+            "Proposals",
+            SHEETS["proposals"],
+            transform_proposals(df),
+            log_fn=log
+        )
+    elif "gift" in lower:
+        write_rows_to_sheet(
+            client,
+            "Gifts",
+            gifts_sheet_id,
+            transform_gifts(df),
+            log_fn=log
+        )
 
     if update_dates:
         update_date_cell(client)
