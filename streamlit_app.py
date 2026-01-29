@@ -32,6 +32,11 @@ DATE_CFG = st.secrets["date_update"]
 st.set_page_config(page_title="Smartsheet Moves Management Upload", layout="wide")
 st.title("Smartsheet Moves Management Upload")
 
+client = importlib.util.spec_from_file_location("ss_auth", "ss_auth.py")
+ss_auth = importlib.util.module_from_spec(client)
+client.loader.exec_module(ss_auth)
+client = ss_auth.get_client()
+
 location = st.radio("Location", ["Denver", "Western Slope"], horizontal=True)
 update_dates = location == "Denver" and st.checkbox("Update last meeting date")
 
@@ -46,12 +51,6 @@ run = st.button("🚀 Run Upload")
 log_box = st.empty()
 def log(msg):
     log_box.code(msg)
-
-def load_ss_auth():
-    spec = importlib.util.spec_from_file_location("ss_auth", "ss_auth.py")
-    ss_auth = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(ss_auth)
-    return ss_auth.get_client()
 
 def format_smartsheet_date(val):
     dt = pd.to_datetime(val, errors="coerce")
