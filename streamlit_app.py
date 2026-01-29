@@ -62,55 +62,83 @@ def format_currency(val):
     except Exception:
         return None
 
-def clear_non_blank_rows(client, sheet_id):
-    sheet = client.Sheets.get_sheet(sheet_id)
-    rows = [
+def clear_non_blank_rows(client, sheet_name, sheet_id, log_fn):
+    try:
+        sheet = client.Sheets.get_sheet(sheet_id)
+    except Exception as e:
+        log_fn(f"⚠ Failed to access sheet {sheet_name}: {e}")
+        return 0
+
+    rows_to_delete = [
         r.id for r in sheet.rows
         if any(c.value not in [None, ""] for c in r.cells)
     ]
-    for i in range(0, len(rows), 300):
-        client.Sheets.delete_rows(sheet_id, rows[i:i+300])
+
+    if not rows_to_delete:
+        log_fn(f"✔ No non-blank rows found in sheet {sheet_name}.")
+        return 0
+
+    log_fn(f"🗑 Deleting {len(rows_to_delete)} non-blank rows from sheet {sheet_name}...")
+    for i in range(0, len(rows_to_delete), 300):
+        batch = rows_to_delete[i:i+300]
+        client.Sheets.delete_rows(sheet_id, batch)
+        log_fn(f"  • Deleted {len(batch)} rows from sheet {sheet_name}.")
         time.sleep(1)
 
-def write_rows_to_sheet(client, sheet_id, df, primary_column_name=None):
+    log_fn(f"✅ Finished clearing sheet {sheet_name}.")
+    return len(rows_to_delete)
+
+def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column_name=None):
     from smartsheet import models as sm
+
+    if df is None or df.empty:
+        log_fn(f"⚠ No rows to write to sheet {sheet_name}.")
+        return 0
 
     sheet = client.Sheets.get_sheet(sheet_id)
     col_map = {c.title.lower(): c.id for c in sheet.columns}
     col_types = {c.title.lower(): c.type for c in sheet.columns}
 
-    rows = []
+    created_rows = []
+
     for i, row in df.iterrows():
         r = sm.Row()
         r.to_bottom = True
 
-        if primary_column_name:
-            pid = col_map.get(primary_column_name.lower())
+        if primary_column_name and primary_column_name.lower() in col_map:
             val = row.get(primary_column_name) or f"Row {i+1}"
-            r.cells.append(sm.Cell(column_id=pid, value=val))
+            r.cells.append(sm.Cell(column_id=col_map[primary_column_name.lower()], value=val))
 
         for col in df.columns:
             key = col.lower()
-            if key not in col_map:
-                continue
-            if primary_column_name and key == primary_column_name.lower():
+            if key not in col_map or (primary_column_name and key == primary_column_name.lower()):
                 continue
 
             val = row[col]
-            if val in ["", None]:
+            if val in [None, ""]:
                 continue
-
             if col_types.get(key) == "DATE":
                 val = format_smartsheet_date(val)
-
             r.cells.append(sm.Cell(column_id=col_map[key], value=val))
 
         if r.cells:
-            rows.append(r)
+            created_rows.append(r)
 
-    for i in range(0, len(rows), 200):
-        client.Sheets.add_rows(sheet_id, rows[i:i+200])
+    if not created_rows:
+        log_fn(f"⚠ No valid rows to add to sheet {sheet_name}.")
+        return 0
+
+    added = 0
+    batch_size = 200
+    for i in range(0, len(created_rows), batch_size):
+        batch = created_rows[i:i+batch_size]
+        client.Sheets.add_rows(sheet_id, batch)
+        added += len(batch)
+        log_fn(f"  • Added {len(batch)} rows to sheet {sheet_name}.")
         time.sleep(0.5)
+
+    log_fn(f"✅ Finished writing {added} rows to sheet {sheet_name}.")
+    return added
 
 def transform_actions(df):
     df = df.copy()
@@ -208,35 +236,38 @@ if run:
 
     log("Clearing target sheets...")
 
-    clear_non_blank_rows(client, SHEETS["actions"])
-    clear_non_blank_rows(client, SHEETS["proposals"])
-    clear_non_blank_rows(client, gifts_sheet_id)
+for name, key in [("Actions", "actions"), ("Proposals", "proposals"), ("Gifts", gifts_sheet_key)]:
+    clear_non_blank_rows(client, name, SHEETS[key], log)
 
-    for file in uploaded_files:
-        df = pd.read_csv(file, dtype=str).fillna("")
-        name = file.name.lower()
+for file in uploaded_files:
+    df = pd.read_csv(file, dtype=str).fillna("")
+    name_lower = file.name.lower()
 
-        if "action" in name:
-            write_rows_to_sheet(
-                client,
-                SHEETS["actions"],
-                transform_actions(df),
-                primary_column_name="Action Unique ID"
-            )
-
-        elif "proposal" in name:
-            write_rows_to_sheet(
-                client,
-                SHEETS["proposals"],
-                transform_proposals(df)
-            )
-
-        elif "gift" in name:
-            write_rows_to_sheet(
-                client,
-                gifts_sheet_id,
-                transform_gifts(df)
-            )
+    if "action" in name_lower:
+        write_rows_to_sheet(
+            client,
+            "Actions",
+            SHEETS["actions"],
+            transform_actions(df),
+            log,
+            primary_column_name="Action Unique ID"
+        )
+    elif "proposal" in name_lower:
+        write_rows_to_sheet(
+            client,
+            "Proposals",
+            SHEETS["proposals"],
+            transform_proposals(df),
+            log
+        )
+    elif "gift" in name_lower:
+        write_rows_to_sheet(
+            client,
+            "Gifts",
+            SHEETS[gifts_sheet_key],
+            transform_gifts(df),
+            log
+        )
 
     if update_dates:
         update_date_cell(client)
