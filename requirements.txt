@@ -1,4 +1,6 @@
 streamlit
 pandas
 smartsheet-python-sdk
-python-dateutil
+requests
+requests-oauthlib
+keyring
