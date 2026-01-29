@@ -51,7 +51,7 @@ def load_ss_auth():
     spec = importlib.util.spec_from_file_location("ss_auth", "ss_auth.py")
     ss_auth = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(ss_auth)
-    return ss_auth.smartsheet_client
+    return ss_auth.get_client()
 
 def format_smartsheet_date(val):
     dt = pd.to_datetime(val, errors="coerce")
@@ -129,8 +129,6 @@ def transform_gifts(df):
 
 def transform_proposals(df):
     df = df.copy()
-    today = pd.to_datetime(datetime.today().date())
-
     df["Proposal Name"] = df.get("Proposal Name", "").fillna("No Proposals")
 
     if "Proposal Import ID" in df.columns:
