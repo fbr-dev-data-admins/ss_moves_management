@@ -234,7 +234,9 @@ if run:
         else SHEETS["gifts_wslope"]
     )
 
-    log("Clearing target sheets...")
+log("Clearing target sheets...")
+
+gifts_sheet_key = "gifts_denver" if location == "Denver" else "gifts_wslope"
 
 for name, key in [("Actions", "actions"), ("Proposals", "proposals"), ("Gifts", gifts_sheet_key)]:
     clear_non_blank_rows(client, name, SHEETS[key], log)
