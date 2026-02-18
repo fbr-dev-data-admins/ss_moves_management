@@ -65,12 +65,12 @@ def format_smartsheet_date(val):
 
 def format_currency(val):
     try:
-        if val in [None, ""] or (isinstance(val, float) and math.isnan(val)):
-            return None
-        result = round(float(str(val).replace("$","").replace(",","")), 2)
-        return None if math.isnan(result) else result
+        if val is None or val == "" or (isinstance(val, float) and math.isnan(val)):
+            return 0.0
+        result = round(float(str(val).replace("$", "").replace(",", "")), 2)
+        return 0.0 if math.isnan(result) else result
     except Exception:
-        return None
+        return 0.0
 
 def clear_non_blank_rows(client, sheet_name, sheet_id, log):
     log(f"Checking {sheet_name} sheet for existing rows...")
@@ -83,24 +83,20 @@ def clear_non_blank_rows(client, sheet_name, sheet_id, log):
     batch_size = 300
     progress_bar = st.progress(0)
     deleted_total = 0
-    num_batches = math.ceil(len(rows) / batch_size)
-    
+
     for i in range(0, len(rows), batch_size):
         batch = rows[i:i+batch_size]
         client.Sheets.delete_rows(sheet_id, batch)
         deleted_total += len(batch)
-        
-        # update progress bar
+
         progress = (i + len(batch)) / len(rows)
         progress_bar.progress(progress)
-        
+
         log(f"🗑 Deleted {deleted_total}/{len(rows)} rows from {sheet_name}...")
         time.sleep(1)
-    
+
     progress_bar.empty()
     log(f"✅ Finished clearing {sheet_name} sheet ({deleted_total} rows).")
-
-    log(f"✅ Finished clearing {sheet_name} sheet.")
 
 def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column_name=None):
     from smartsheet import models as sm
@@ -132,7 +128,8 @@ def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column
             if key not in col_map or (primary_column_name and key == primary_column_name.lower()):
                 continue
             val = row[col]
-            if val in [None, ""]:
+            # Guard against None, empty string, and float NaN
+            if val is None or val == "" or (isinstance(val, float) and math.isnan(val)):
                 continue
             if col_types.get(key) == "DATE":
                 val = format_smartsheet_date(val)
@@ -150,37 +147,36 @@ def write_rows_to_sheet(client, sheet_name, sheet_id, df, log_fn, primary_column
 
     added = 0
     batch_size = 200
-    num_batches = math.ceil(len(created_rows) / batch_size)
     progress_bar = st.progress(0)
-    
+
     for i in range(0, len(created_rows), batch_size):
         batch = created_rows[i:i+batch_size]
         client.Sheets.add_rows(sheet_id, batch)
         added += len(batch)
-    
-        # update progress bar
+
         progress = min((i + len(batch)) / len(created_rows), 1.0)
         progress_bar.progress(progress)
-    
+
         log_fn(f"  • Added {added}/{len(created_rows)} rows to sheet {sheet_name}...")
-    
+
     progress_bar.empty()
     log_fn(f"✅ Finished writing {added} rows to sheet {sheet_name}.")
 
 # ---------------- Transformers ----------------
 def transform_actions(df):
     df = df.copy()
-    df["Action Unique ID"] = (df.get("Action Import ID","").astype(str) + " " + df.get("Solicitor Name","").astype(str)).str.strip()
+    df["Action Unique ID"] = (df.get("Action Import ID", "").astype(str) + " " + df.get("Solicitor Name", "").astype(str)).str.strip()
     return df
 
 def transform_proposals(df):
     df = df.copy()
     df["Proposal Name"] = df.get("Proposal Name", "").fillna("No Proposals")
-    df["Primary Solicitor"] = df.apply(lambda r: r["Primary Solicitor"] if r.get("Primary Solicitor") else "No Primary Solicitor", axis=1)
+    df["Primary Solicitor"] = df.apply(
+        lambda r: r["Primary Solicitor"] if r.get("Primary Solicitor") else "No Primary Solicitor", axis=1
+    )
     for col in ["Amount Asked", "Amount Expected", "Amount Funded"]:
         if col in df.columns:
             df[col] = df[col].apply(format_currency)
-            df[col] = df[col].where(df[col].notna(), None)
     return df
 
 def transform_gifts(df):
@@ -192,11 +188,11 @@ def transform_gifts(df):
 def update_date_cell(client):
     sheet = client.Sheets.get_sheet(DATE_CFG["sheet_id"], include="rows")
     col_id = next(c.id for c in sheet.columns if c.title == DATE_CFG["column_name"])
-    prev = next(c.value for r in sheet.rows if r.id == DATE_CFG["target_row_id"] for c in r.cells if c.column_id==col_id)
+    prev = next(c.value for r in sheet.rows if r.id == DATE_CFG["target_row_id"] for c in r.cells if c.column_id == col_id)
     today = datetime.now().strftime("%Y-%m-%d")
     client.Sheets.update_rows(DATE_CFG["sheet_id"], [
-        {"id": DATE_CFG["target_row_id"], "cells":[{"columnId": col_id, "value": today}]},
-        {"id": DATE_CFG["old_row_id"], "cells":[{"columnId": col_id, "value": prev}]}
+        {"id": DATE_CFG["target_row_id"], "cells": [{"columnId": col_id, "value": today}]},
+        {"id": DATE_CFG["old_row_id"], "cells": [{"columnId": col_id, "value": prev}]}
     ])
 
 # ---------------- Run ----------------
@@ -211,13 +207,12 @@ if run:
         ("Actions", SHEETS["actions"]),
         ("Proposals", SHEETS["proposals"]),
     ]
-    
+
     gifts_sheet_key = "gifts_denver" if location == "Denver" else "gifts_wslope"
     sheets_to_clear.append(("Gifts", SHEETS[gifts_sheet_key]))
-    
+
     for name, sheet_id in sheets_to_clear:
         clear_non_blank_rows(client, name, sheet_id, log)
-
 
     for file in uploaded_files:
         df = pd.read_csv(file, dtype=str, encoding="cp1252").fillna("")
