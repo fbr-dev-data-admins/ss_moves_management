@@ -65,7 +65,10 @@ def format_smartsheet_date(val):
 
 def format_currency(val):
     try:
-        return round(float(str(val).replace("$","").replace(",","")), 2)
+        if val in [None, ""] or (isinstance(val, float) and math.isnan(val)):
+            return None
+        result = round(float(str(val).replace("$","").replace(",","")), 2)
+        return None if math.isnan(result) else result
     except Exception:
         return None
 
@@ -177,6 +180,7 @@ def transform_proposals(df):
     for col in ["Amount Asked", "Amount Expected", "Amount Funded"]:
         if col in df.columns:
             df[col] = df[col].apply(format_currency)
+            df[col] = df[col].where(df[col].notna(), None)
     return df
 
 def transform_gifts(df):
