@@ -174,6 +174,9 @@ def transform_proposals(df):
     df = df.copy()
     df["Proposal Name"] = df.get("Proposal Name", "").fillna("No Proposals")
     df["Primary Solicitor"] = df.apply(lambda r: r["Primary Solicitor"] if r.get("Primary Solicitor") else "No Primary Solicitor", axis=1)
+    for col in ["Amount Asked", "Amount Expected", "Amount Funded"]:
+        if col in df.columns:
+            df[col] = df[col].apply(format_currency)
     return df
 
 def transform_gifts(df):
