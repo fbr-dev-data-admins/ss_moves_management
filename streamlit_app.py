@@ -170,14 +170,90 @@ def transform_actions(df):
 
 def transform_proposals(df):
     df = df.copy()
-    df["Proposal Name"] = df.get("Proposal Name", "").fillna("No Proposals")
-    df["Primary Solicitor"] = df.apply(
-        lambda r: r["Primary Solicitor"] if r.get("Primary Solicitor") else "No Primary Solicitor", axis=1
-    )
+
+    # ── Identify proposal block anchors ──────────────────────────────────────
+    # The anchor column for each block is the first column whose name starts
+    # with "Proposal Import ID" (e.g. "Proposal Import ID", "Proposal Import ID_1", ...)
+    all_cols = df.columns.tolist()
+    anchor_col = "Proposal Import ID"
+
+    # Collect every column that belongs to each block by finding each anchor
+    # and grouping the columns between consecutive anchors.
+    anchor_indices = [i for i, c in enumerate(all_cols) if c == anchor_col or c.startswith(anchor_col + "_")]
+
+    if not anchor_indices:
+        # Fallback: no block structure found — treat as flat file
+        df["Proposal Name"] = df.get("Proposal Name", pd.Series(dtype=str)).fillna("No Proposals")
+        df["Primary Solicitor"] = df.apply(
+            lambda r: r["Primary Solicitor"] if r.get("Primary Solicitor") else "No Primary Solicitor", axis=1
+        )
+        for col in ["Amount Asked", "Amount Expected", "Amount Funded"]:
+            if col in df.columns:
+                df[col] = df[col].apply(format_currency)
+        return df
+
+    # ── Determine base (non-proposal) columns ────────────────────────────────
+    first_block_start = anchor_indices[0]
+    base_cols = [c for c in all_cols[:first_block_start]]
+
+    # ── Build one block definition per anchor ────────────────────────────────
+    blocks = []
+    for idx, start in enumerate(anchor_indices):
+        end = anchor_indices[idx + 1] if idx + 1 < len(anchor_indices) else len(all_cols)
+        block_cols = all_cols[start:end]
+
+        # Derive canonical field names by stripping the "_N" suffix
+        # e.g. "Proposal Name_2" → "Proposal Name"
+        field_map = {}
+        for col in block_cols:
+            if col.endswith(f"_{idx}") or (idx > 0 and col.endswith(f"_{idx}")):
+                canonical = col[: -(len(str(idx)) + 1)]
+            else:
+                # Strip any trailing _N suffix generically
+                parts = col.rsplit("_", 1)
+                canonical = parts[0] if len(parts) == 2 and parts[1].isdigit() else col
+            field_map[col] = canonical
+
+        blocks.append(field_map)
+
+    # ── Pivot: one output row per non-empty proposal block per input row ──────
+    rows = []
+    for _, row in df.iterrows():
+        for field_map in blocks:
+            # Check anchor column — skip block if empty
+            anchor_raw = list(field_map.keys())[0]
+            anchor_val = row.get(anchor_raw, "")
+            if anchor_val is None or str(anchor_val).strip() == "":
+                continue
+
+            new_row = {c: row[c] for c in base_cols if c in row.index}
+            for raw_col, canonical in field_map.items():
+                if raw_col in row.index:
+                    new_row[canonical] = row[raw_col]
+
+            rows.append(new_row)
+
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.DataFrame(rows)
+
+    # ── Post-process ──────────────────────────────────────────────────────────
+    if "Proposal Name" in out.columns:
+        out["Proposal Name"] = out["Proposal Name"].fillna("No Proposals").replace("", "No Proposals")
+
+    if "Primary Solicitor" in out.columns:
+        out["Primary Solicitor"] = out["Primary Solicitor"].apply(
+            lambda v: v if v and str(v).strip() else "No Primary Solicitor"
+        )
+    else:
+        out["Primary Solicitor"] = "No Primary Solicitor"
+
     for col in ["Amount Asked", "Amount Expected", "Amount Funded"]:
-        if col in df.columns:
-            df[col] = df[col].apply(format_currency)
-    return df
+        if col in out.columns:
+            out[col] = out[col].apply(format_currency)
+
+    return out
 
 def transform_gifts(df):
     df = df.copy()
