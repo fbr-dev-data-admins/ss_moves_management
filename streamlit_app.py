@@ -282,7 +282,7 @@ if run:
     sheets_to_clear = [
         ("Actions", SHEETS["actions"]),
         ("Quality Contacts", SHEETS["quality_contacts"]),
-        ("Donor Visits", SHEETS["donor_visits"])
+        ("Donor Visits", SHEETS["donor_visits"]),
         ("Proposals", SHEETS["proposals"]),
     ]
 
